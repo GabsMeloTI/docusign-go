@@ -9,7 +9,7 @@ RUN go mod tidy
 
 COPY . .
 
-RUN go build -o main ./cmd/main.go
+RUN go build -o main ./main.go
 
 RUN chmod +x main
 
