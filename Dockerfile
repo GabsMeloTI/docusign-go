@@ -1,10 +1,16 @@
 FROM golang:1.22.2-alpine AS builder
 LABEL authors="gabriel"
 
+RUN apk update && apk add --no-cache \
+    wkhtmltopdf \
+    build-base \
+    git \
+    && rm -rf /var/cache/apk/*
+
 WORKDIR /app
 
-COPY go.mod ./
-COPY go.sum ./
+COPY go.mod .
+COPY go.sum .
 RUN go mod tidy
 
 COPY . .
@@ -20,3 +26,4 @@ RUN id
 EXPOSE 8080
 
 CMD ["./main"]
+
