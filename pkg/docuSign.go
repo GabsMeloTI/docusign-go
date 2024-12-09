@@ -89,60 +89,19 @@ func GetAccessToken(jwtToken string) (string, error) {
 	return "", fmt.Errorf("falha ao obter o token de acesso, resposta: %v", result)
 }
 
-func GeneratePDF(templateData, outputFile string) error {
-	tmpl := `
-	<html lang="pt-BR">
-	<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modelo de Moção</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-        }
-        h1, h2 {
-            text-align: center;
-        }
-        .content {
-            text-align: justify;
-        }
-        .footer {
-            margin-top: 40px;
-        }
-    </style>
-	</head>
-		<body>
-			<h1>MODELO DE MOÇÃO</h1>
-			<h2>MOÇÃO Nº</h2>
-			<p>Senhor Teste,</p>
-			<div class="content">
-				<p>
-					Os Vereadores que abaixo subscrevem, solicitam que após ouvido o Soberano Plenário desta Casa, se envie Moção de Repúdio ao Ministério da Educação, em razão da criação do exame nacional de cursos, o denominado provão, pelos motivos a seguir delineados:
-				</p>
-				<p>
-					Refém também dos empresários da educação, o Governo Federal procura se mostrar diligente com esse importante setor da vida nacional, inventando o exame nacional de cursos, popularmente chamado de "provão", que sob o pretexto de avaliar as escolas de ensino superior, acaba submetendo os universitários ao arbítrio de uma exposição absolutamente desnecessária e ineficaz, tendo em vista a existência de meios mais efetivos de avaliar a qualidade do ensino superior no País.
-				</p>
-				<p>
-					Por isso apresentamos a presente Moção de Repúdio ao mencionado exame nacional de cursos, mero teatro que se tenta represar diante da opinião pública e que apenas repete outros capítulos de um dos maiores problemas brasileiros: a educação.
-				</p>
-			</div>
-			<div class="footer">
-				<p>Nome do Município - SC, ... de ... de 2001.</p>
-				<p><b>Nomes e assinaturas dos Vereadores.</b></p>
-			</div>
-		</body>
-	</html>
-	`
+func GeneratePDF(templateFilePath string, templateData interface{}, outputFile string) error {
+	tmplContent, err := ioutil.ReadFile(templateFilePath)
+	if err != nil {
+		return fmt.Errorf("error reading template file: %v", err)
+	}
 
-	tmplParsed, err := template.New("contract").Parse(tmpl)
+	tmpl, err := template.New("contract").Parse(string(tmplContent))
 	if err != nil {
 		return fmt.Errorf("error parsing template: %v", err)
 	}
 
 	var renderedHTML bytes.Buffer
-	err = tmplParsed.Execute(&renderedHTML, templateData)
+	err = tmpl.Execute(&renderedHTML, templateData)
 	if err != nil {
 		return fmt.Errorf("error executing template: %v", err)
 	}
@@ -154,7 +113,6 @@ func GeneratePDF(templateData, outputFile string) error {
 
 	page := wkhtmltopdf.NewPageReader(strings.NewReader(renderedHTML.String()))
 	pdfg.AddPage(page)
-
 	pdfg.OutputFile = outputFile
 
 	if err = pdfg.Create(); err != nil {
@@ -200,8 +158,9 @@ func SendEnvelope(accessToken, accountID string, envelope model.EnvelopeDefiniti
 		return "", fmt.Errorf("failed to decode response: %v", err)
 	}
 
+	var envelopeID string
 	if envelopeID, ok := result["envelopeId"].(string); ok {
 		return envelopeID, nil
 	}
-	return "", fmt.Errorf("envelopeId not found in response: %s", string(body))
+	return envelopeID, fmt.Errorf("envelopeId not found in response: %s", string(body))
 }

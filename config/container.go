@@ -1,17 +1,17 @@
 package config
 
 import (
+	"database/sql"
 	"docusign/infra/database"
 	"docusign/infra/database/db_postgresql"
 	"docusign/internal/contract"
-
-	"database/sql"
 )
 
 type ContainerDI struct {
 	Config             Config
 	Conn               *sql.DB
 	HandlerContract    *contract.ContractHandler
+	WebhookHandler     *contract.WebhookHandler
 	ServiceContract    *contract.ContractService
 	RepositoryContract *contract.ContractRepository
 }
@@ -22,7 +22,7 @@ func NewContainerDI(config Config) *ContainerDI {
 	container.db()
 	container.buildRepository()
 	container.buildService()
-	container.buildHandler()
+	container.buildHandlers()
 
 	return container
 }
@@ -49,6 +49,7 @@ func (c *ContainerDI) buildService() {
 	c.ServiceContract = contract.NewContractService(c.RepositoryContract)
 }
 
-func (c *ContainerDI) buildHandler() {
+func (c *ContainerDI) buildHandlers() {
 	c.HandlerContract = contract.NewContractHandler(c.ServiceContract)
+	c.WebhookHandler = contract.NewWebhookHandler(*c.ServiceContract)
 }

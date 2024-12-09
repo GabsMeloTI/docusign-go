@@ -6,14 +6,54 @@ package db
 
 import (
 	"database/sql"
+	"time"
+
+	"github.com/google/uuid"
 )
 
+type Anticipation struct {
+	ID            int64           `json:"id"`
+	NumberDoc     sql.NullString  `json:"number_doc"`
+	ValueOriginal sql.NullFloat64 `json:"value_original"`
+	DateIssue     sql.NullString  `json:"date_issue"`
+	DateDue       sql.NullString  `json:"date_due"`
+	Parcel        sql.NullInt64   `json:"parcel"`
+	TypeDoc       sql.NullString  `json:"type_doc"`
+	MotiveDoc     sql.NullString  `json:"motive_doc"`
+	IDClient      sql.NullInt64   `json:"id_client"`
+	IDControl     uuid.NullUUID   `json:"id_control"`
+	Requested     sql.NullBool    `json:"requested"`
+	Status        sql.NullBool    `json:"status"`
+	CreateAt      time.Time       `json:"create_at"`
+	UpdateAt      sql.NullTime    `json:"update_at"`
+	AccessID      sql.NullInt64   `json:"access_id"`
+	TenantID      uuid.NullUUID   `json:"tenant_id"`
+}
+
+type AnticipationSolicit struct {
+	ID                 int64         `json:"id"`
+	IDAnticipation     sql.NullInt64 `json:"id_anticipation"`
+	Status             sql.NullBool  `json:"status"`
+	CreateAt           time.Time     `json:"create_at"`
+	Batch              uuid.NullUUID `json:"batch"`
+	IDSolicit          uuid.NullUUID `json:"id_solicit"`
+	Paid               sql.NullBool  `json:"paid"`
+	DatePaid           sql.NullTime  `json:"date_paid"`
+	StatusAnticipation sql.NullInt64 `json:"status_anticipation"`
+}
+
 type Contract struct {
-	ID           int32        `json:"id"`
-	ProviderName string       `json:"provider_name"`
-	DocumentUrl  string       `json:"document_url"`
-	Status       string       `json:"status"`
-	CreatedAt    sql.NullTime `json:"created_at"`
-	IsSigned     sql.NullBool `json:"is_signed"`
-	DateSigned   sql.NullTime `json:"date_signed"`
+	ID             int64         `json:"id"`
+	ProviderName   string        `json:"provider_name"`
+	ProviderEmail  string        `json:"provider_email"`
+	DocumentUrl    string        `json:"document_url"`
+	Status         string        `json:"status"`
+	CreatedAt      sql.NullTime  `json:"created_at"`
+	IsSigned       sql.NullBool  `json:"is_signed"`
+	DateSigned     sql.NullTime  `json:"date_signed"`
+	EnvelopID      string        `json:"envelop_id"`
+	AccessID       sql.NullInt64 `json:"access_id"`
+	TenantID       uuid.NullUUID `json:"tenant_id"`
+	ContractType   string        `json:"contract_type"`
+	IDControlBatch uuid.NullUUID `json:"id_control_batch"`
 }

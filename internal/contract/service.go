@@ -2,17 +2,21 @@ package contract
 
 import (
 	"context"
+	"database/sql"
 	db "docusign/db/sqlc"
 	"docusign/internal/model"
 	"docusign/pkg"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"os"
 	"strings"
+	"time"
 )
 
 type ContractInterfaceService interface {
 	CreateContractService(context.Context, ContractRequestCreate) (ContractResponse, error)
+	AssignContractService(context.Context, string) (ContractResponse, error)
 }
 
 type ContractService struct {
@@ -26,19 +30,27 @@ func NewContractService(ContractInterface ContractInterfaceRepository) *Contract
 func (s *ContractService) CreateContractService(ctx context.Context, data ContractRequestCreate) (ContractResponse, error) {
 	unicId := uuid.New()
 
-	arg := db.CreateContractParams{
-		ProviderName: data.ProviderName,
-		DocumentUrl:  "https://contracts-guapi.s3.us-east-1.amazonaws.com/terms_of_authorization/contract-" + unicId.String() + ".pdf",
+	var valueBatch uuid.UUID
+	if data.ContractType == "term_of_assignment" {
+		valueBatch = uuid.Nil
+	} else {
+		if data.IdBatchControl == uuid.Nil {
+			return ContractResponse{}, errors.New("id_batch_control must be provided for this contract type")
+		}
+		valueBatch = data.IdBatchControl
 	}
 
-	result, err := s.ContractInterface.CreateContractRepository(ctx, arg)
-	if err != nil {
-		return ContractResponse{}, err
+	templatePath := "assets/" + data.ContractType + ".html"
+	outputFile := fmt.Sprintf("contract-%s.pdf", unicId.String())
+	dataPdf := map[string]interface{}{
+		"name_enterprise": data.ProviderName,
+		"date":            time.Now().Format("02 de Janeiro de 2006"),
 	}
-
-	err = pkg.GeneratePDF(arg.ProviderName, fmt.Sprintf("contract-%s.pdf", unicId.String()))
+	err := pkg.GeneratePDF(templatePath, dataPdf, outputFile)
 	if err != nil {
-		return ContractResponse{}, fmt.Errorf("error generating PDF: %v", err)
+		fmt.Printf("Erro ao gerar o PDF: %v\n", err)
+	} else {
+		fmt.Println("PDF gerado com sucesso:", outputFile)
 	}
 
 	jwtToken, err := pkg.GenerateJWT(os.Getenv("DOCUSIGN_APIKEY"), os.Getenv("DOCUSIGN_USERNAME"), strings.ReplaceAll(os.Getenv("DOCUSIGN_RSA_PRIVATE_KEY"), "\\n", "\n"))
@@ -51,7 +63,7 @@ func (s *ContractService) CreateContractService(ctx context.Context, data Contra
 		return ContractResponse{}, err
 	}
 
-	_, err = pkg.UploadFileToS3(fmt.Sprintf("contract-%s.pdf", unicId.String()), "contracts-guapi/terms_of_authorization/")
+	_, err = pkg.UploadFileToS3(fmt.Sprintf("contract-%s.pdf", unicId.String()), "contracts-guapi/"+data.ContractType+"/")
 	if err != nil {
 		return ContractResponse{}, fmt.Errorf("error uploading to S3: %v", err)
 	}
@@ -74,8 +86,8 @@ func (s *ContractService) CreateContractService(ctx context.Context, data Contra
 		Recipients: model.Recipients{
 			Signers: []model.Signer{
 				{
-					Email:        "bielmelodossantos8@gmail.com",
-					Name:         "Guilherme Zoio Da Sul",
+					Email:        data.ProviderEmail,
+					Name:         data.ProviderName,
 					RecipientID:  "1",
 					RoutingOrder: "1",
 					Tabs: model.Tabs{
@@ -85,8 +97,8 @@ func (s *ContractService) CreateContractService(ctx context.Context, data Contra
 								PageNumber:  "1",
 								RecipientID: "1",
 								TabLabel:    "AssinaturaAqui",
-								XPosition:   "100",
-								YPosition:   "150",
+								XPosition:   "30",
+								YPosition:   "480",
 							},
 						},
 					},
@@ -96,7 +108,32 @@ func (s *ContractService) CreateContractService(ctx context.Context, data Contra
 		Status: "sent",
 	}
 
-	_, err = pkg.SendEnvelope(accessToken, os.Getenv("DOCUSIGN_ACCTID"), dataEnvelope)
+	resultEnv, err := pkg.SendEnvelope(accessToken, os.Getenv("DOCUSIGN_ACCTID"), dataEnvelope)
+	if err != nil {
+		return ContractResponse{}, err
+	}
+
+	arg := db.CreateContractParams{
+		ProviderName:  data.ProviderName,
+		ProviderEmail: data.ProviderEmail,
+		ContractType:  data.ContractType,
+		IDControlBatch: uuid.NullUUID{
+			UUID:  valueBatch,
+			Valid: true,
+		},
+		DocumentUrl: "https://contracts-guapi.s3.us-east-1.amazonaws.com/terms_of_authorization/contract-" + unicId.String() + ".pdf",
+		EnvelopID:   resultEnv,
+		AccessID: sql.NullInt64{
+			Int64: data.AccessId,
+			Valid: true,
+		},
+		TenantID: uuid.NullUUID{
+			UUID:  data.TenantId,
+			Valid: true,
+		},
+	}
+
+	result, err := s.ContractInterface.CreateContractRepository(ctx, arg)
 	if err != nil {
 		return ContractResponse{}, err
 	}
@@ -107,67 +144,7 @@ func (s *ContractService) CreateContractService(ctx context.Context, data Contra
 	return createContract, err
 }
 
-//func SendContract(configs config.Config) {
-//	jwtToken, err := generateJWT(configs.DocuSignApiKey, configs.DocuSignUsername, configs.DocuSignRSAKey)
-//
-//	if err != nil {
-//		fmt.Println("Erro ao gerar JWT:", err)
-//		return
-//	}
-//	fmt.Println("JWT Gerado:", jwtToken)
-//
-//	accessToken, err := getAccessToken(jwtToken)
-//	if err != nil {
-//		fmt.Println("Erro ao obter token de acesso:", err)
-//		return
-//	}
-//
-//	encodedContent, err := encodeFileToBase64("document.pdf")
-//	if err != nil {
-//		fmt.Println("Erro ao codificar documento:", err)
-//		return
-//	}
-//
-//	envelope := model.EnvelopeDefinition{
-//		EmailSubject: "Contrato",
-//		Documents: []model.Document{
-//			{
-//				DocumentBase64: encodedContent,
-//				Name:           "Contrato.pdf",
-//				FileExtension:  "pdf",
-//				DocumentID:     "1",
-//			},
-//		},
-//		Recipients: model.Recipients{
-//			Signers: []model.Signer{
-//				{
-//					Email:        "bielmelodossantos8@gmail.com",
-//					Name:         "Guilherme Zoio Da Sul",
-//					RecipientID:  "1",
-//					RoutingOrder: "1",
-//					Tabs: model.Tabs{
-//						SignHereTabs: []model.SignHereTab{
-//							{
-//								DocumentID:  "1",
-//								PageNumber:  "1",
-//								RecipientID: "1",
-//								TabLabel:    "AssinaturaAqui",
-//								XPosition:   "100",
-//								YPosition:   "150",
-//							},
-//						},
-//					},
-//				},
-//			},
-//		},
-//		Status: "sent",
-//	}
-//
-//	envelopeID, err := sendEnvelope(accessToken, configs.DocuSignAccountId, envelope)
-//	if err != nil {
-//		fmt.Println("Erro ao enviar envelope:", err)
-//		return
-//	}
-//
-//	fmt.Println("Envelope enviado com sucesso. ID do Envelope:", envelopeID)
-//}
+func (s *ContractService) AssignContractService(ctx context.Context, envelopeID string) (ContractResponse, error) {
+	_, err := s.ContractInterface.AssignedContract(ctx, envelopeID)
+	return ContractResponse{}, err
+}

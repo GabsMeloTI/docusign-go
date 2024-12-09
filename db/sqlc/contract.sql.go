@@ -7,31 +7,128 @@ package db
 
 import (
 	"context"
+	"database/sql"
+
+	"github.com/google/uuid"
 )
 
-const createContract = `-- name: CreateContract :one
-INSERT INTO public.contracts
-(id, provider_name, document_url, status, created_at, is_signed, date_signed)
-VALUES(nextval('contracts_id_seq'::regclass), $1, $2, 'pending'::character varying, now(), false, NULL)
-    RETURNING id, provider_name, document_url, status, created_at, is_signed, date_signed
+const assignContract = `-- name: AssignContract :one
+UPDATE public.contracts
+SET status='assign', is_signed=true, date_signed=now()
+WHERE envelop_id=$1 AND
+      is_signed=false AND
+      status!='assign'
+    RETURNING id, provider_name, provider_email, document_url, status, created_at, is_signed, date_signed, envelop_id, access_id, tenant_id, contract_type, id_control_batch
 `
 
-type CreateContractParams struct {
-	ProviderName string `json:"provider_name"`
-	DocumentUrl  string `json:"document_url"`
-}
-
-func (q *Queries) CreateContract(ctx context.Context, arg CreateContractParams) (Contract, error) {
-	row := q.db.QueryRowContext(ctx, createContract, arg.ProviderName, arg.DocumentUrl)
+func (q *Queries) AssignContract(ctx context.Context, envelopID string) (Contract, error) {
+	row := q.db.QueryRowContext(ctx, assignContract, envelopID)
 	var i Contract
 	err := row.Scan(
 		&i.ID,
 		&i.ProviderName,
+		&i.ProviderEmail,
 		&i.DocumentUrl,
 		&i.Status,
 		&i.CreatedAt,
 		&i.IsSigned,
 		&i.DateSigned,
+		&i.EnvelopID,
+		&i.AccessID,
+		&i.TenantID,
+		&i.ContractType,
+		&i.IDControlBatch,
+	)
+	return i, err
+}
+
+const createContract = `-- name: CreateContract :one
+INSERT INTO public.contracts
+(id, provider_name, provider_email, document_url, status, created_at, is_signed, date_signed, envelop_id, "access_id", "tenant_id", contract_type, id_control_batch)
+VALUES(nextval('contracts_id_seq'::regclass), $1, $2, $3,'pending'::character varying, now(), false, NULL, $4, $5, $6, $7, $8)
+    RETURNING id, provider_name, provider_email, document_url, status, created_at, is_signed, date_signed, envelop_id, access_id, tenant_id, contract_type, id_control_batch
+`
+
+type CreateContractParams struct {
+	ProviderName   string        `json:"provider_name"`
+	ProviderEmail  string        `json:"provider_email"`
+	DocumentUrl    string        `json:"document_url"`
+	EnvelopID      string        `json:"envelop_id"`
+	AccessID       sql.NullInt64 `json:"access_id"`
+	TenantID       uuid.NullUUID `json:"tenant_id"`
+	ContractType   string        `json:"contract_type"`
+	IDControlBatch uuid.NullUUID `json:"id_control_batch"`
+}
+
+func (q *Queries) CreateContract(ctx context.Context, arg CreateContractParams) (Contract, error) {
+	row := q.db.QueryRowContext(ctx, createContract,
+		arg.ProviderName,
+		arg.ProviderEmail,
+		arg.DocumentUrl,
+		arg.EnvelopID,
+		arg.AccessID,
+		arg.TenantID,
+		arg.ContractType,
+		arg.IDControlBatch,
+	)
+	var i Contract
+	err := row.Scan(
+		&i.ID,
+		&i.ProviderName,
+		&i.ProviderEmail,
+		&i.DocumentUrl,
+		&i.Status,
+		&i.CreatedAt,
+		&i.IsSigned,
+		&i.DateSigned,
+		&i.EnvelopID,
+		&i.AccessID,
+		&i.TenantID,
+		&i.ContractType,
+		&i.IDControlBatch,
+	)
+	return i, err
+}
+
+const getContractAll = `-- name: GetContractAll :one
+
+SELECT id, provider_name, provider_email, document_url, status, created_at, is_signed, date_signed, envelop_id, access_id, tenant_id, contract_type, id_control_batch
+FROM public.contracts
+WHERE access_id=$1 AND tenant_id=$2
+`
+
+type GetContractAllParams struct {
+	AccessID sql.NullInt64 `json:"access_id"`
+	TenantID uuid.NullUUID `json:"tenant_id"`
+}
+
+// -- name: AssignContractAssignment :one
+// UPDATE public.contracts
+// SET status='assign', is_signed=true, date_signed=now()
+// WHERE envelop_id=$1 AND
+//
+//	is_signed=false AND
+//	status!='assign'AND
+//	  contract_type = 'term_of_assignment' AND
+//	  id_control_batch IS NULL
+//	RETURNING *;
+func (q *Queries) GetContractAll(ctx context.Context, arg GetContractAllParams) (Contract, error) {
+	row := q.db.QueryRowContext(ctx, getContractAll, arg.AccessID, arg.TenantID)
+	var i Contract
+	err := row.Scan(
+		&i.ID,
+		&i.ProviderName,
+		&i.ProviderEmail,
+		&i.DocumentUrl,
+		&i.Status,
+		&i.CreatedAt,
+		&i.IsSigned,
+		&i.DateSigned,
+		&i.EnvelopID,
+		&i.AccessID,
+		&i.TenantID,
+		&i.ContractType,
+		&i.IDControlBatch,
 	)
 	return i, err
 }
