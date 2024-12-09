@@ -1,11 +1,11 @@
-FROM golang:1.22.2-alpine AS builder
+FROM ubuntu:22.04 AS builder
 LABEL authors="gabriel"
 
-RUN apk update && apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     wkhtmltopdf \
-    build-base \
+    build-essential \
     git \
-    && rm -rf /var/cache/apk/*
+    && apt-get clean
 
 WORKDIR /app
 
@@ -19,11 +19,6 @@ RUN go build -o main ./main.go
 
 RUN chmod +x main
 
-RUN ls -l main
-RUN whoami
-RUN id
-
 EXPOSE 8080
 
 CMD ["./main"]
-
