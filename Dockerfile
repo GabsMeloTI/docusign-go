@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 AS builder
+FROM golang:1.22 AS builder
 LABEL authors="gabriel"
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     && apt-get clean
-    
+
 WORKDIR /app
 
 COPY go.mod .
